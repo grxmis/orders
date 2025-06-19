@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Διαχείριση Παραγγελιών</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    input, select, button {
+      margin: 5px;
+      padding: 5px;
+    }
+    .preview-img {
+      height: 50px;
+      cursor: pointer;
+    }
+    #previewSelectedImage {
+      height: 100px;
+      display: none;
+      margin-top: 10px;
+    }
+    .popup {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.8);
+      justify-content: center;
+      align-items: center;
+    }
+    .popup img {
+      max-width: 90vw;
+      max-height: 90vh;
+    }
+    .actions-column button {
+      margin-right: 5px;
+    }
+    @media print {
+      .no-print {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Διαχείριση Παραγγελιών</h1>
+
+  <input type="file" id="imageInput" accept="image/*" class="no-print">
+  <br>
+  <img id="previewSelectedImage" alt="Προεπισκόπηση Εικόνας">
+  <br>
+  <select id="savedSelect" class="no-print"></select>
+  <br>
+  <input type="text" id="barcode" placeholder="Barcode">
+  <input type="text" id="description" placeholder="Περιγραφή">
+  <input type="number" id="quantity" placeholder="Ποσότητα">
+  <button onclick="addOrder()">Προσθήκη / Ενημέρωση</button>
+  <button onclick="deleteAllOrders()" class="no-print">Διαγραφή Όλων</button>
+  <button onclick="printPreview()" class="no-print">Εκτύπωση</button>
+  <button onclick="exportPDF()" class="no-print">Εξαγωγή PDF</button>
+  <br><br>
+  <input type="text" id="search" placeholder="Αναζήτηση" oninput="renderOrders()">
+
+  <table border="1" width="100%" id="orderTable">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Ημερομηνία</th>
+        <th>Barcode</th>
+        <th>Περιγραφή</th>
+        <th>Ποσότητα</th>
+        <th>Εικόνα</th>
+        <th class="no-print">Ενέργειες</th>
+      </tr>
+    </thead>
+    <tbody id="orderBody"></tbody>
+  </table>
+
+  <div class="popup" id="popup" onclick="this.style.display='none'">
+    <img id="popupImg" alt="Μεγέθυνση Εικόνας">
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+ <script>
+  let orders = JSON.parse(localStorage.getItem('orders')) || [];
+  let savedItems = JSON.parse(localStorage.getItem('savedItems')) || [];
+  let currentEdit = null;
+
+  const imageInput = document.getElementById('imageInput');
+  const barcodeInput = document.getElementById('barcode');
+  const descriptionInput = document.getElementById('description');
+  const quantityInput = document.getElementById('quantity');
+  const savedSelect = document.getElementById('savedSelect');
+  const previewSelectedImage = document.getElementById('previewSelectedImage');
+
+  let selectedImageFileName = "";
+
+  imageInput.addEventListener('change', function () {
+    const file = this.files[0];
+    if (file) {
+      selectedImageFileName = file.name;
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        previewSelectedImage.src = e.target.result;
+        previewSelectedImage.style.display = 'inline-block';
+        savedSelect.value = "";
+      };
+      reader.readAsDataURL(file);
+
+      const fileNameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
+      const underscoreIndex = fileNameWithoutExt.indexOf("_");
+      if (underscoreIndex !== -1) {
+        barcodeInput.value = fileNameWithoutExt.substring(0, underscoreIndex);
+        descriptionInput.value = fileNameWithoutExt.substring(underscoreIndex + 1).replace(/_/g, ' ');
+      } else {
+        barcodeInput.value = fileNameWithoutExt;
+        descriptionInput.value = '';
+      }
+    }
+  });
+
+  function populateSavedSelect() {
+    savedSelect.innerHTML = "<option value=''>-- Επιλογή Αποθηκευμένου Είδους --</option>";
+    savedItems.forEach((item, i) => {
+      savedSelect.innerHTML += `<option value="${i}">${item.barcode} - ${item.description}</option>`;
+    });
+  }
+
+  savedSelect.addEventListener('change', function () {
+    const index = this.value;
+    if (index === '') {
+      barcodeInput.value = '';
+      descriptionInput.value = '';
+      previewSelectedImage.style.display = 'none';
+      selectedImageFileName = '';
+    } else {
+      const item = savedItems[index];
+      barcodeInput.value = item.barcode;
+      descriptionInput.value = item.description;
+      selectedImageFileName = `${item.barcode}_${item.description.replace(/ /g, "_")}.jpg`;
+      const path = `images/${selectedImageFileName}`;
+      previewSelectedImage.src = path;
+      previewSelectedImage.style.display = 'inline-block';
+    }
+  });
+
+  function addOrder() {
+    const barcode = barcodeInput.value.trim();
+    const description = descriptionInput.value.trim();
+    const quantity = quantityInput.value.trim();
+
+    if (!barcode || !description || !quantity) {
+      alert("Συμπλήρωσε όλα τα πεδία.");
+      return;
+    }
+
+    if (!savedItems.some(item => item.barcode === barcode)) {
+      savedItems.push({ barcode, description });
+      localStorage.setItem('savedItems', JSON.stringify(savedItems));
+      populateSavedSelect();
+    }
+
+    // Αν δεν έχουμε ανεβάσει αρχείο, δημιουργούμε όνομα εικόνας
+    const imagePath = selectedImageFileName
+      ? `images/${selectedImageFileName}`
+      : `images/${barcode}_${description.replace(/ /g, "_")}.jpg`;
+
+    const order = {
+      barcode,
+      description,
+      quantity,
+      date: new Date().toLocaleDateString(),
+      image: imagePath
+    };
+
+    if (currentEdit !== null) {
+      orders[currentEdit] = order;
+      currentEdit = null;
+    } else {
+      orders.push(order);
+    }
+
+    saveOrders();
+    clearInputs();
+    renderOrders();
+  }
+
+  function saveOrders() {
+    localStorage.setItem('orders', JSON.stringify(orders));
+  }
+
+  function clearInputs() {
+    barcodeInput.value = '';
+    descriptionInput.value = '';
+    quantityInput.value = '';
+    imageInput.value = '';
+    previewSelectedImage.style.display = 'none';
+    savedSelect.value = '';
+    selectedImageFileName = '';
+  }
+
+  function renderOrders() {
+    const tbody = document.getElementById('orderBody');
+    const searchText = document.getElementById('search').value.toLowerCase();
+    tbody.innerHTML = "";
+
+    orders.forEach((order, index) => {
+      if (
+        !order.barcode.toLowerCase().includes(searchText) &&
+        !order.description.toLowerCase().includes(searchText) &&
+        !order.date.toLowerCase().includes(searchText)
+      ) {
+        return;
+      }
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${index + 1}</td>
+        <td>${order.date}</td>
+        <td>${order.barcode}</td>
+        <td>${order.description}</td>
+        <td>${order.quantity}</td>
+        <td>
+          <img src="${order.image}" class="preview-img" alt="Εικόνα" onclick="showPopup(this.src)" />
+        </td>
+        <td class="actions-column no-print">
+          <button class="edit-btn" onclick="editOrder(${index})">✏️</button>
+          <button class="delete-btn" onclick="deleteOrder(${index})">🗑️</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function showPopup(src) {
+    const popup = document.getElementById('popup');
+    const popupImg = document.getElementById('popupImg');
+    popupImg.src = src;
+    popup.style.display = 'flex';
+  }
+
+  function editOrder(index) {
+    const order = orders[index];
+    barcodeInput.value = order.barcode;
+    descriptionInput.value = order.description;
+    quantityInput.value = order.quantity;
+    previewSelectedImage.src = order.image;
+    previewSelectedImage.style.display = 'inline-block';
+    selectedImageFileName = order.image.split('/').pop();
+    currentEdit = index;
+  }
+
+  function deleteOrder(index) {
+    if (confirm("Είσαι σίγουρος ότι θέλεις να διαγράψεις αυτή την παραγγελία;")) {
+      orders.splice(index, 1);
+      saveOrders();
+      renderOrders();
+    }
+  }
+
+  function deleteAllOrders() {
+    if (confirm("Είσαι σίγουρος ότι θέλεις να διαγράψεις όλες τις παραγγελίες;")) {
+      orders = [];
+      saveOrders();
+      renderOrders();
+    }
+  }
+
+  function printPreview() {
+    window.print();
+  }
+
+  async function exportPDF(){
+  const table = document.getElementById('orderTable'); 
+  const actionsCols = document.querySelectorAll('.actions-column'); 
+
+  // Κρύβουμε προσωρινά στήλες ενεργειών
+  actionsCols.forEach(col => col.style.display = 'none');
+
+  // Περιμένουμε λίγο ώστε να αποδοθεί σωστά το layout χωρίς τις ενέργειες
+  await new Promise(resolve => setTimeout(resolve, 300));
+
+  // Παίρνουμε snapshot του πίνακα
+  html2canvas(table, { scale: 2 }).then(canvas => {
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
+
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pageWidth;
+    const imgHeight = canvas.height * imgWidth / canvas.width;
+
+    let position = 0;
+
+    if (imgHeight <= pageHeight) {
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    } else {
+      // Αν η εικόνα είναι μεγαλύτερη από μία σελίδα
+      let heightLeft = imgHeight;
+      let y = 0;
+
+      while (heightLeft > 0) {
+        pdf.addImage(imgData, 'PNG', 0, y, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+        if (heightLeft > 0) {
+          pdf.addPage();
+          y = - (imgHeight - heightLeft);
+        }
+      }
+    }
+
+    pdf.save('paraggelies.pdf');
+    actionsCols.forEach(col => col.style.display = 'table-cell');
+  });
+}
+
+
+  populateSavedSelect();
+  renderOrders();
+</script>
+
+</body>
+</html>
