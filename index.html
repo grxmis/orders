@@ -1,40 +1,55 @@
 <!DOCTYPE html>
 <html lang="el">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GitHub Gallery</title>
+  <meta charset="UTF-8">
+  <title>Εικόνες από το GitHub Repo</title>
   <style>
-    body { font-family: sans-serif; padding: 2rem; background: #f9f9f9; }
-    #gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
-    img { width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      background-color: #f9f9f9;
+    }
+    h1 {
+      margin-top: 20px;
+    }
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+      padding: 20px;
+    }
+    .gallery img {
+      width: 100%;
+      height: auto;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
   </style>
 </head>
 <body>
-  <h1>🖼️ Πρόοϊόντα από GitHub</h1>
-  <div id="gallery">Φόρτωση...</div>
+  <h1>Gallery από το GitHub Repo</h1>
+  <div class="gallery" id="gallery">Φόρτωση εικόνων...</div>
 
   <script>
-    const baseRaw = "https://raw.githubusercontent.com/grxmis/orders/main/orders/images/";
+    const apiUrl = "https://api.github.com/repos/grxmis/orders/contents/images";
 
-    fetch(baseRaw + "gallery.json")
-      .then(res => {
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        return res.json();
-      })
-      .then(imageNames => {
+    fetch(apiUrl)
+      .then(res => res.json())
+      .then(data => {
         const gallery = document.getElementById("gallery");
         gallery.innerHTML = "";
-        imageNames.forEach(name => {
-          const img = document.createElement("img");
-          img.src = baseRaw + encodeURIComponent(name);
-          img.alt = name;
-          img.loading = "lazy";
-          gallery.appendChild(img);
+
+        data.forEach(file => {
+          if (file.type === "file" && file.name.match(/\.(jpg|jpeg|png|gif)$/i)) {
+            const img = document.createElement("img");
+            img.src = file.download_url;
+            img.alt = file.name;
+            gallery.appendChild(img);
+          }
         });
       })
-      .catch(err => {
-        console.error("Σφάλμα φόρτωσης:", err);
+      .catch(error => {
+        console.error("Σφάλμα:", error);
         document.getElementById("gallery").innerText = "Αποτυχία φόρτωσης εικόνων.";
       });
   </script>
