@@ -2,50 +2,40 @@
 <html lang="el">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GitHub Gallery</title>
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 2rem;
-      background: #f9f9f9;
-    }
-    #gallery {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-    }
-    img {
-      width: 100%;
-      height: auto;
-      border-radius: 8px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
+    body { font-family: sans-serif; padding: 2rem; background: #f9f9f9; }
+    #gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+    img { width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
   </style>
 </head>
 <body>
-  <h1>🖼️ Προϊόντα από GitHub</h1>
-  <div id="gallery">Φόρτωση εικόνων...</div>
+  <h1>🖼️ Πρόοϊόντα από GitHub</h1>
+  <div id="gallery">Φόρτωση...</div>
 
   <script>
-    const baseRawURL = "https://raw.githubusercontent.com/grxmis/orders/main/orders/images/";
+    const baseRaw = "https://raw.githubusercontent.com/grxmis/orders/main/orders/images/";
 
-    fetch(baseRawURL + "gallery.json")
-      .then(res => res.json())
+    fetch(baseRaw + "gallery.json")
+      .then(res => {
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      })
       .then(imageNames => {
         const gallery = document.getElementById("gallery");
         gallery.innerHTML = "";
         imageNames.forEach(name => {
           const img = document.createElement("img");
-          img.src = baseRawURL + encodeURIComponent(name);
+          img.src = baseRaw + encodeURIComponent(name);
           img.alt = name;
           img.loading = "lazy";
           gallery.appendChild(img);
         });
       })
       .catch(err => {
-        console.error("Σφάλμα φόρτωσης gallery.json:", err);
-        document.getElementById("gallery").innerText = "Σφάλμα φόρτωσης εικόνων.";
+        console.error("Σφάλμα φόρτωσης:", err);
+        document.getElementById("gallery").innerText = "Αποτυχία φόρτωσης εικόνων.";
       });
   </script>
 </body>
